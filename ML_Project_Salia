@@ -1,0 +1,72 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+# Load Dataset
+file_path = "/mnt/data/journal_ranking_data.csv"
+df = pd.read_csv(file_path)
+
+# Data Preprocessing
+numerical_cols = ['SJR-index', 'CiteScore', 'H-index', 'Total Docs.', 'Total Cites 3y', 'Cites/Doc. 2y']
+df = df.dropna(subset=numerical_cols)  # Removing rows with missing numerical values
+scaler = StandardScaler()
+df_scaled = scaler.fit_transform(df[numerical_cols])
+
+# Clustering with K-Means
+wcss = []
+for i in range(2, 10):
+    kmeans = KMeans(n_clusters=i, random_state=42, n_init=10)
+    kmeans.fit(df_scaled)
+    wcss.append(kmeans.inertia_)
+
+# Elbow Method
+plt.plot(range(2, 10), wcss, marker='o')
+plt.xlabel('Number of Clusters')
+plt.ylabel('WCSS')
+plt.title('Elbow Method for Optimal Clusters')
+plt.show()
+
+# Selecting optimal clusters
+optimal_clusters = 4  # Assume 4 based on elbow method
+kmeans = KMeans(n_clusters=optimal_clusters, random_state=42, n_init=10)
+df['Cluster'] = kmeans.fit_predict(df_scaled)
+
+# Evaluating Clustering
+silhouette_avg = silhouette_score(df_scaled, df['Cluster'])
+print(f'Silhouette Score: {silhouette_avg}')
+
+# PCA for Visualization
+pca = PCA(n_components=2)
+pca_transformed = pca.fit_transform(df_scaled)
+df['PCA1'] = pca_transformed[:, 0]
+df['PCA2'] = pca_transformed[:, 1]
+sns.scatterplot(x='PCA1', y='PCA2', hue=df['Cluster'], palette='viridis', data=df)
+plt.title('Clusters Visualization')
+plt.show()
+
+# Classification Model: Predicting Best Quartile
+label_encoder = LabelEncoder()
+df['Best Quartile Encoded'] = label_encoder.fit_transform(df['Best Quartile'])
+X = df_scaled
+y = df['Best Quartile Encoded']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train a Random Forest Classifier
+classifier = RandomForestClassifier(n_estimators=100, random_state=42)
+classifier.fit(X_train, y_train)
+y_pred = classifier.predict(X_test)
+
+# Model Evaluation
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("Classification Report:\n", classification_report(y_test, y_pred))
+sns.heatmap(confusion_matrix(y_test, y_pred), annot=True, fmt='d', cmap='Blues')
+plt.title('Confusion Matrix')
+plt.show()
